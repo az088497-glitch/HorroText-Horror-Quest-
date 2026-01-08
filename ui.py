@@ -1,383 +1,323 @@
 """
-Модуль графического интерфейса на Tkinter
-"""
-
 import tkinter as tk
-from tkinter import ttk, messagebox, scrolledtext
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import sqlite3
-from datetime import datetime
+from tkinter import scrolledtext, messagebox
+import json
+import os
 
-
-class GameUI:
-    """Класс для управления графическим интерфейсом игры"""
-
-    def __init__(self, root, game_engine):
-        """
-        Инициализация интерфейса
-
-        Args:
-            root: Корневое окно Tkinter
-            game_engine: Объект игрового движка
-        """
+class TextHorrorQuest:
+    def __init__(self, root) -> None:
         self.root = root
-        self.game_engine = game_engine
-
-        # Переменные интерфейса
-        self.text_vars = {}
-        self.button_widgets = []
-
-        # Инициализация базы данных SQLite
-        self.init_database()
-
-        # Создание интерфейса
-        self.create_widgets()
-        self.update_display()
-
-    def init_database(self):
-        """Инициализация базы данных SQLite"""
-        try:
-            self.conn = sqlite3.connect('data/database.db')
-            self.cursor = self.conn.cursor()
-
-            # Создание таблицы для статистики игроков
-            self.cursor.execute('''
-                CREATE TABLE IF NOT EXISTS game_stats (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    player_name TEXT,
-                    final_score INTEGER,
-                    choices_count INTEGER,
-                    play_time_seconds REAL,
-                    end_date TIMESTAMP
-                )
-            ''')
-
-            # Создание таблицы для детальной статистики
-            self.cursor.execute('''
-                CREATE TABLE IF NOT EXISTS choice_stats (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    game_id INTEGER,
-                    scene_id TEXT,
-                    choice_text TEXT,
-                    timestamp TIMESTAMP,
-                    FOREIGN KEY (game_id) REFERENCES game_stats (id)
-                )
-            ''')
-
-            self.conn.commit()
-            print("✓ База данных инициализирована")
-        except Exception as e:
-            print(f"✗ Ошибка инициализации БД: {e}")
-            self.conn = None
-
-    def create_widgets(self):
-        """Создание виджетов интерфейса"""
+        self.root.title('Текстовый квест ужасов: Пропавшая ёлка ИТМО')
+        
+        # Устанавливаем размер окна
+        self.ШИРИНА = 900  # константы
+        self.ВЫСОТА = 600
+        self.root.geometry(f"{self.ШИРИНА}x{self.ВЫСОТА}")
+        self.root.resizable(True, True)
+        
+        # Переменные игры
+        self.текущая_сцена = "start"
+        self.имя_игрока = "Игрок"
+        self.история = self.загрузить_историю()
+        
+        # Создаем интерфейс
+        self.создать_интерфейс()
+        
+        # Показать первую сцену
+        self.показать_сцену("start")
+    
+    def создать_интерфейс(self):
+        """Создание графического интерфейса игры"""
+        
         # Основной фрейм
-        main_frame = ttk.Frame(self.root, padding="10")
-        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-
-        # Настройка расширения
-        self.root.columnconfigure(0, weight=1)
-        self.root.rowconfigure(0, weight=1)
-        main_frame.columnconfigure(1, weight=1)
-        main_frame.rowconfigure(1, weight=1)
-
+        основной_фрейм = tk.Frame(self.root, bg="#2c3e50")
+        основной_фрейм.pack(fill=tk.BOTH, expand=True)
+        
         # Заголовок
-        title_label = ttk.Label(
-            main_frame,
-            text="Text Horror Quest: Пропавшая Ёлка ИТМО",
-            font=("Arial", 16, "bold")
+        заголовок_рамка = tk.Frame(основной_фрейм, bg="#34495e", height=60)
+        заголовок_рамка.pack(fill=tk.X)
+        заголовок_рамка.pack_propagate(False)
+        
+        заголовок = tk.Label(
+            заголовок_рамка,
+            text="ТЕКСТОВЫЙ КВЕСТ УЖАСОВ: ПРОПАВШАЯ ЁЛКА ИТМО",
+            font=("Arial", 18, "bold"),
+            fg="white",
+            bg="#34495e"
         )
-        title_label.grid(row=0, column=0, columnspan=3, pady=(0, 10))
-
+        заголовок.pack(pady=15)
+        
+        # Фрейм для контента
+        контент_фрейм = tk.Frame(основной_фрейм, bg="#ecf0f1")
+        контент_фрейм.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
         # Левая панель - текст истории
-        left_frame = ttk.LabelFrame(main_frame, text="История", padding="10")
-        left_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(0, 5))
-
-        # Текстовое поле с прокруткой
-        self.story_text = scrolledtext.ScrolledText(
-            left_frame,
+        левая_панель = tk.LabelFrame(
+            контент_фрейм,
+            text=" 📖 ИСТОРИЯ ",
+            font=("Arial", 12, "bold"),
+            bg="white",
+            fg="#2c3e50",
+            relief=tk.GROOVE,
+            borderwidth=2
+        )
+        левая_панель.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
+        
+        # Текстовое поле с прокруткой для истории
+        self.текстовое_поле = scrolledtext.ScrolledText(
+            левая_панель,
             wrap=tk.WORD,
-            width=50,
+            font=("Georgia", 13),
+            bg="#fff8e1",
+            relief=tk.FLAT,
             height=20,
-            font=("Arial", 11)
+            padx=15,
+            pady=15
         )
-        self.story_text.pack(fill=tk.BOTH, expand=True)
-        self.story_text.config(state=tk.DISABLED)
-
-        # Центральная панель - выбор действий
-        center_frame = ttk.LabelFrame(main_frame, text="Выбор действий", padding="10")
-        center_frame.grid(row=1, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=5)
-
+        self.текстовое_поле.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        self.текстовое_поле.config(state=tk.DISABLED)
+        
+        # Правая панель - выбор действий
+        правая_панель = tk.LabelFrame(
+            контент_фрейм,
+            text=" 🎯 ВЫБОР ДЕЙСТВИЙ ",
+            font=("Arial", 12, "bold"),
+            bg="white",
+            fg="#2c3e50",
+            relief=tk.GROOVE,
+            borderwidth=2,
+            width=300
+        )
+        правая_панель.pack(side=tk.RIGHT, fill=tk.BOTH, padx=(10, 0))
+        правая_панель.pack_propagate(False)
+        
         # Фрейм для кнопок выбора
-        self.choices_frame = ttk.Frame(center_frame)
-        self.choices_frame.pack(fill=tk.BOTH, expand=True)
-
-        # Правая панель - статистика и управление
-        right_frame = ttk.LabelFrame(main_frame, text="Статистика", padding="10")
-        right_frame.grid(row=1, column=2, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(5, 0))
-
-        # Информация об игроке
-        self.player_info_text = tk.Text(
-            right_frame,
-            wrap=tk.WORD,
-            width=25,
-            height=8,
-            font=("Arial", 10)
+        self.фрейм_кнопок = tk.Frame(правая_панель, bg="white")
+        self.фрейм_кнопок.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
+        
+        # Фрейм для ввода имени игрока
+        нижняя_панель = tk.Frame(основной_фрейм, bg="#34495e", height=50)
+        нижняя_панель.pack(fill=tk.X, side=tk.BOTTOM)
+        нижняя_панель.pack_propagate(False)
+        
+        метка_имени = tk.Label(
+            нижняя_панель,
+            text="👤 Ваше имя:",
+            font=("Arial", 11),
+            fg="white",
+            bg="#34495e"
         )
-        self.player_info_text.pack(fill=tk.X, pady=(0, 10))
-        self.player_info_text.config(state=tk.DISABLED)
-
-        # Кнопки управления
-        buttons_frame = ttk.Frame(right_frame)
-        buttons_frame.pack(fill=tk.X)
-
-        ttk.Button(
-            buttons_frame,
-            text="Сохранить игру",
-            command=self.save_game
-        ).pack(fill=tk.X, pady=2)
-
-        ttk.Button(
-            buttons_frame,
-            text="Загрузить игру",
-            command=self.load_game
-        ).pack(fill=tk.X, pady=2)
-
-        ttk.Button(
-            buttons_frame,
-            text="Показать статистику",
-            command=self.show_statistics
-        ).pack(fill=tk.X, pady=2)
-
-        ttk.Button(
-            buttons_frame,
-            text="О программе",
-            command=self.show_about
-        ).pack(fill=tk.X, pady=2)
-
-        ttk.Button(
-            buttons_frame,
-            text="Выход",
+        метка_имени.pack(side=tk.LEFT, padx=(20, 10), pady=15)
+        
+        self.поле_ввода_имени = tk.Entry(
+            нижняя_панель,
+            font=("Arial", 11),
+            width=20,
+            relief=tk.GROOVE
+        )
+        self.поле_ввода_имени.pack(side=tk.LEFT, padx=(0, 10), pady=15)
+        self.поле_ввода_имени.insert(0, "Игрок")
+        
+        кнопка_имени = tk.Button(
+            нижняя_панель,
+            text="✓ Установить имя",
+            font=("Arial", 10, "bold"),
+            bg="#27ae60",
+            fg="white",
+            relief=tk.RAISED,
+            command=self.установить_имя
+        )
+        кнопка_имени.pack(side=tk.LEFT, padx=(0, 20), pady=15)
+        
+        # Кнопка сохранения игры
+        кнопка_сохранения = tk.Button(
+            нижняя_панель,
+            text="💾 Сохранить игру",
+            font=("Arial", 10, "bold"),
+            bg="#2980b9",
+            fg="white",
+            relief=tk.RAISED,
+            command=self.сохранить_игру
+        )
+        кнопка_сохранения.pack(side=tk.RIGHT, padx=(0, 10), pady=15)
+        
+        # Кнопка выхода
+        кнопка_выхода = tk.Button(
+            нижняя_панель,
+            text="🚪 Выход",
+            font=("Arial", 10, "bold"),
+            bg="#e74c3c",
+            fg="white",
+            relief=tk.RAISED,
             command=self.root.quit
-        ).pack(fill=tk.X, pady=2)
-
-        # Фрейм для ввода имени
-        name_frame = ttk.Frame(main_frame)
-        name_frame.grid(row=2, column=0, columnspan=3, pady=(10, 0), sticky=(tk.W, tk.E))
-
-        ttk.Label(name_frame, text="Ваше имя:").pack(side=tk.LEFT)
-        self.name_entry = ttk.Entry(name_frame, width=20)
-        self.name_entry.pack(side=tk.LEFT, padx=5)
-
-        ttk.Button(
-            name_frame,
-            text="Установить имя",
-            command=self.set_player_name
-        ).pack(side=tk.LEFT)
-
-    def update_display(self):
-        """Обновление отображения игры"""
-        # Очистка предыдущих виджетов
-        for widget in self.choices_frame.winfo_children():
-            widget.destroy()
-
-        # Получение текущей сцены
-        scene = self.game_engine.get_current_scene()
-        scene_text = scene.get("text", "Текст сцены не найден")
-
-        # Замена плейсхолдера имени
-        if "{player_name}" in scene_text:
-            scene_text = scene_text.replace("{player_name}", self.game_engine.player.name)
-
-        # Обновление текста истории
-        self.story_text.config(state=tk.NORMAL)
-        self.story_text.delete(1.0, tk.END)
-        self.story_text.insert(1.0, scene_text)
-        self.story_text.config(state=tk.DISABLED)
-
-        # Создание кнопок выбора
-        choices = scene.get("choices", [])
-
-        if not choices:
-            # Если нет выборов - игра окончена
-            self.show_game_over()
-        else:
-            for i, choice in enumerate(choices):
-                button = ttk.Button(
-                    self.choices_frame,
-                    text=choice["text"],
-                    command=lambda idx=i: self.handle_choice(idx),
-                    width=40
-                )
-                button.pack(pady=5, fill=tk.X)
-
-        # Обновление информации об игроке
-        self.update_player_info()
-
-    def handle_choice(self, choice_index):
-        """Обработка выбора игрока"""
-        if self.game_engine.make_choice(choice_index):
-            self.update_display()
-
-            # Проверка завершения игры
-            if self.game_engine.is_game_over():
-                self.save_final_stats()
-
-    def set_player_name(self):
-        """Установка имени игрока"""
-        name = self.name_entry.get().strip()
-        if name:
-            self.game_engine.player.name = name
-            messagebox.showinfo("Имя установлено", f"Привет, {name}!")
-            self.update_player_info()
-
-    def update_player_info(self):
-        """Обновление информации об игроке"""
-        player = self.game_engine.player
-        stats = self.game_engine.get_game_stats()
-
-        info_text = f"""Игрок: {player.name}
-Очки: {player.score}
-
-Статистика:
-- Смелость: {player.stats['courage']}
-- Интеллект: {player.stats['intelligence']}
-- Удача: {player.stats['luck']}
-- Расследование: {player.stats['investigation']}
-
-Инвентарь: {', '.join(player.inventory) if player.inventory else 'пуст'}
-
-Всего выборов: {stats['choices_made']}
-Время игры: {int(stats['game_duration_seconds'])} сек."""
-
-        self.player_info_text.config(state=tk.NORMAL)
-        self.player_info_text.delete(1.0, tk.END)
-        self.player_info_text.insert(1.0, info_text)
-        self.player_info_text.config(state=tk.DISABLED)
-
-    def save_game(self):
-        """Сохранение игры"""
-        filename = f"save_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        if self.game_engine.save_game(filename):
-            messagebox.showinfo("Сохранение", f"Игра сохранена как {filename}")
-        else:
-            messagebox.showerror("Ошибка", "Не удалось сохранить игру")
-
-    def load_game(self):
-        """Загрузка игры"""
-        # В реальном приложении здесь был бы диалог выбора файла
-        messagebox.showinfo("Загрузка", "Функция загрузки в разработке")
-
-    def show_statistics(self):
-        """Показать статистику игры"""
-        stats_window = tk.Toplevel(self.root)
-        stats_window.title("Статистика игры")
-        stats_window.geometry("600x400")
-
-        # Получаем статистику
-        stats = self.game_engine.get_game_stats()
-
-        # Создаем график с помощью matplotlib
-        fig, axes = plt.subplots(1, 2, figsize=(10, 4))
-
-        # График статистики игрока
-        player_stats = stats['player_stats']
-        stat_names = list(player_stats.keys())
-        stat_values = list(player_stats.values())
-
-        axes[0].bar(stat_names, stat_values, color=['blue', 'green', 'red', 'purple'])
-        axes[0].set_title('Статистика игрока')
-        axes[0].set_ylabel('Значение')
-
-        # Круговая диаграмма истории выборов
-        choice_counts = {}
-        for choice in self.game_engine.choices_history:
-            scene = choice['scene']
-            choice_counts[scene] = choice_counts.get(scene, 0) + 1
-
-        if choice_counts:
-            labels = list(choice_counts.keys())
-            sizes = list(choice_counts.values())
-            axes[1].pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90)
-            axes[1].set_title('Распределение по сценам')
-        else:
-            axes[1].text(0.5, 0.5, 'Нет данных о выборах',
-                         ha='center', va='center')
-
-        plt.tight_layout()
-
-        # Встраиваем график в Tkinter
-        canvas = FigureCanvasTkAgg(fig, master=stats_window)
-        canvas.draw()
-        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-
-    def save_final_stats(self):
-        """Сохранение финальной статистики в БД"""
-        if not self.conn:
-            return
-
-        stats = self.game_engine.get_game_stats()
-
-        try:
-            # Сохраняем основную статистику
-            self.cursor.execute('''
-                INSERT INTO game_stats 
-                (player_name, final_score, choices_count, play_time_seconds, end_date)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (
-                stats['player_name'],
-                stats['player_stats'].get('investigation', 0) * 10,
-                stats['choices_made'],
-                stats['game_duration_seconds'],
-                datetime.now().isoformat()
-            ))
-
-            game_id = self.cursor.lastrowid
-
-            # Сохраняем детальную статистику выборов
-            for choice in self.game_engine.choices_history:
-                self.cursor.execute('''
-                    INSERT INTO choice_stats 
-                    (game_id, scene_id, choice_text, timestamp)
-                    VALUES (?, ?, ?, ?)
-                ''', (
-                    game_id,
-                    choice['scene'],
-                    choice['choice'],
-                    choice['timestamp']
-                ))
-
-            self.conn.commit()
-            print("✓ Финальная статистика сохранена в БД")
-        except Exception as e:
-            print(f"✗ Ошибка сохранения статистики: {e}")
-
-    def show_game_over(self):
-        """Показать экран завершения игры"""
-        messagebox.showinfo(
-            "Игра завершена",
-            "Поздравляем! Вы завершили квест.\n\n"
-            "Ваша статистика сохранена.\n"
-            "Спасибо за игру!"
         )
+        кнопка_выхода.pack(side=tk.RIGHT, padx=(10, 20), pady=15)
+    
+    def загрузить_историю(self):
+        """Загрузка истории игры из JSON файла"""
+        try:
+            путь_к_файлу = os.path.join("data", "story.json")
+            with open(путь_к_файлу, "r", encoding="utf-8") as файл:
+                return json.load(файл)
+        except FileNotFoundError:
+            сообщение = "Файл истории не найден!\nСоздана тестовая история."
+            messagebox.showwarning("Внимание", сообщение)
+            return self.создать_тестовую_историю()
+    
+    def создать_тестовую_историю(self):
+        """Создание тестовой истории если файл не найден"""
+        return {
+            "start": {
+                "text": "Добро пожаловать в текстовый квест 'Пропавшая ёлка ИТМО'!\n\nЭто тестовая версия игры. Полная версия с полной историей скоро будет доступна.",
+                "choices": [
+                    {"text": "Начать игру", "next": "test_scene"}
+                ]
+            },
+            "test_scene": {
+                "text": "Вы стоите перед зданием ИТМО. Странно, но новогодняя ёлка, которая всегда стояла здесь, исчезла!",
+                "choices": [
+                    {"text": "Осмотреться вокруг", "next": "end"},
+                    {"text": "Спросить у прохожих", "next": "end"}
+                ]
+            },
+            "end": {
+                "text": "Тестовая версия завершена. Спасибо за тестирование!\n\nДля полной версии убедитесь, что файл data/story.json существует и содержит полную историю.",
+                "choices": []
+            }
+        }
+    
+    def показать_сцену(self, идентификатор_сцены):
+        """Отображение текущей сцены игры"""
+        self.текущая_сцена = идентификатор_сцены
+        сцена = self.история.get(идентификатор_сцены, {})
+        
+        # Получаем текст сцены
+        текст_сцены = сцена.get("text", "Текст сцены не найден")
+        
+        # Заменяем плейсхолдер имени игрока
+        if "{player_name}" in текст_сцены:
+            текст_сцены = текст_сцены.replace("{player_name}", self.имя_игрока)
+        
+        # Обновляем текстовое поле
+        self.текстовое_поле.config(state=tk.NORMAL)
+        self.текстовое_поле.delete(1.0, tk.END)
+        self.текстовое_поле.insert(1.0, текст_сцены)
+        self.текстовое_поле.config(state=tk.DISABLED)
+        
+        # Очищаем старые кнопки
+        for виджет in self.фрейм_кнопок.winfo_children():
+            виджет.destroy()
+        
+        # Получаем варианты выбора
+        варианты = сцена.get("choices", [])
+        
+        if not варианты:
+            # Если нет вариантов - игра окончена
+            self.показать_завершение_игры()
+        else:
+            # Создаем кнопки для каждого варианта
+            for индекс, выбор in enumerate(варианты):
+                кнопка = tk.Button(
+                    self.фрейм_кнопок,
+                    text=выбор["text"],
+                    font=("Arial", 11),
+                    bg="#3498db",
+                    fg="white",
+                    relief=tk.RAISED,
+                    width=30,
+                    height=2,
+                    wraplength=250,
+                    command=lambda idx=индекс: self.обработать_выбор(idx)
+                )
+                кнопка.pack(pady=8, fill=tk.X)
+    
+    def обработать_выбор(self, индекс_выбора):
+        """Обработка выбора игрока"""
+        текущая_сцена = self.история.get(self.текущая_сцена, {})
+        варианты = текущая_сцена.get("choices", [])
+        
+        if 0 <= индекс_выбора < len(варианты):
+            выбранный_вариант = варианты[индекс_выбора]
+            следующая_сцена = выбранный_вариант.get("next")
+            
+            if следующая_сцена in self.история:
+                self.показать_сцену(следующая_сцена)
+            else:
+                messagebox.showerror("Ошибка", f"Сцена '{следующая_сцена}' не найдена!")
+    
+    def установить_имя(self):
+        """Установка имени игрока"""
+        новое_имя = self.поле_ввода_имени.get().strip()
+        if новое_имя:
+            self.имя_игрока = новое_имя
+            messagebox.showinfo("Имя установлено", f"Привет, {новое_имя}!")
+            # Обновляем текущую сцену с новым именем
+            self.показать_сцену(self.текущая_сцена)
+    
+    def показать_завершение_игры(self):
+        """Показать экран завершения игры"""
+        # Создаем кнопку для перезапуска игры
+        кнопка_перезапуска = tk.Button(
+            self.фрейм_кнопок,
+            text="🔄 Начать заново",
+            font=("Arial", 12, "bold"),
+            bg="#e67e22",
+            fg="white",
+            relief=tk.RAISED,
+            width=30,
+            height=2,
+            command=self.перезапустить_игру
+        )
+        кнопка_перезапуска.pack(pady=20)
+    
+    def перезапустить_игру(self):
+        """Перезапуск игры с начала"""
+        self.текущая_сцена = "start"
+        self.показать_сцену("start")
+    
+    def сохранить_игру(self):
+        """Сохранение текущего прогресса игры"""
+        try:
+            # Создаем папку saves если её нет
+            папка_сохранений = "saves"
+            if not os.path.exists(папка_сохранений):
+                os.makedirs(папка_сохранений)
+            
+            # Данные для сохранения
+            данные_сохранения = {
+                "player_name": self.имя_игрока,
+                "current_scene": self.текущая_сцена,
+                "timestamp": "2024-01-09"  # В реальной версии используйте datetime
+            }
+            
+            # Сохраняем в файл
+            путь_сохранения = os.path.join(папка_сохранений, "автосохранение.json")
+            with open(путь_сохранения, "w", encoding="utf-8") as файл:
+                json.dump(данные_сохранения, файл, ensure_ascii=False, indent=2)
+            
+            messagebox.showinfo("Сохранение", "Игра успешно сохранена!")
+            
+        except Exception as ошибка:
+            messagebox.showerror("Ошибка", f"Не удалось сохранить игру:\n{ошибка}")
 
-    def show_about(self):
-        """Показать информацию о программе"""
-        about_text = """Text Horror Quest: Пропавшая Ёлка ИТМО
 
-Версия: 1.0
-Разработчик: Команда курса "Основы программирования"
+def main():
+    """Основная функция запуска игры"""
+    корень = tk.Tk()
+    
+    # Центрируем окно на экране
+    ширина_экрана = корень.winfo_screenwidth()
+    высота_экрана = корень.winfo_screenheight()
+    x = (ширина_экрана - 900) // 2
+    y = (высота_экрана - 600) // 2
+    корень.geometry(f"900x600+{x}+{y}")
+    
+    # Создаем и запускаем игру
+    игра = TextHorrorQuest(корень)
+    
+    # Запускаем главный цикл
+    корень.mainloop()
 
-Игра разработана в рамках учебного проекта.
-Используемые технологии:
-- Python 3.8+
-- Tkinter для GUI
-- JSON для хранения данных
-- SQLite для статистики
-- Matplotlib для визуализации
 
-© 2024 Все права защищены."""
-
-        messagebox.showinfo("О программе", about_text)
+if __name__ == "__main__":
+    main()
