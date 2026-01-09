@@ -2,12 +2,11 @@
 import json
 import tkinter as tk
 from tkinter import scrolledtext, messagebox, simpledialog
-from PIL import Image, ImageTk  # Установите: pip install Pillow
+from PIL import Image, ImageTk  # Установите: pip install Pillow #добавить эти библиотеки в отчет
 
 
 class QuestGame:
     """Упрощенный класс игры"""
-
     def __init__(self, story_json):
         self.story = story_json
         self.current_scene = "start"
