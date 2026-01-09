@@ -10,7 +10,8 @@ current_scene = "start"
 player_name = ""
 state = {
     "refused_journalist": False,
-    "close_seat": False
+    "close_seat": False,
+    "that_news_true": False
 }
 
 def get_choices(scene, mode="default"):
@@ -43,15 +44,17 @@ def show_scene(scene_id, mode="default"):
 
     choices = get_choices(scene, mode)
     for choice in choices:
-        btn = tk.Button(
+        button = tk.Button(
             buttons_frame,
             text=choice['text'],
             wraplength=400,
             width=15,
             command=lambda n=choice["next"]: on_choice(n)
         )
-        btn.pack(fill='x', pady=5)
+        button.pack(fill='x', pady=5)
 
+    if scene.get("type")== "ending":
+        restart_button()
 
 
 def on_choice(next_scene):
@@ -69,7 +72,9 @@ def on_choice(next_scene):
     mode = "default"
     if next_scene == "corridor_cross":
         if state["refused_journalist"] and state["close_seat"]:
-            mode = "extended"
+            mode = "add_var1"
+        elif state["that_news_true"]:
+            mode = "add_var2"
     show_scene(next_scene, mode=mode)
 
 
@@ -81,6 +86,16 @@ def ask_name():
     )
     if not player_name:
         player_name = "Player 1"
+
+def restart_button():
+    btn_restart = tk.Button(
+        buttons_frame,
+        text="Пройти заново",
+        width=15,
+        command=lambda: show_scene("start")
+    )
+    btn_restart.pack(fill="x", pady=5)
+
 
 # Tkinter
 root = tk.Tk()
