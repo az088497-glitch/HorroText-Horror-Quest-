@@ -3,7 +3,7 @@ import tkinter as tk
 from tkinter import simpledialog
 
 # загрузка json
-with open("story.json", "r", encoding="utf-8") as f:
+with open("story_v2.json", "r", encoding="utf-8") as f:
     story = json.load(f)
 
 current_scene = "start"
@@ -43,12 +43,12 @@ def show_scene(scene_id, mode="default"):
     for choice in choices:
         button = tk.Button(
             buttons_frame,
-            text=choice['text'],
+            text=choice["text"],
             wraplength=400,
-            width=15,
-            command=lambda n=choice["next"]: on_choice(n)
+            width=25,
+            command=lambda c=choice: manage_choice(c)
         )
-        button.pack(fill='x', pady=5)
+        button.pack(fill="x", pady=5)
 
     if scene.get("type") == "game_over":
         restart_button()
@@ -81,7 +81,6 @@ def on_choice(next_scene):
 
     show_scene(next_scene, mode=mode)
 
-
 def ask_name():
     global player_name
     player_name = simpledialog.askstring(
@@ -94,11 +93,33 @@ def ask_name():
 def restart_button():
     btn_restart = tk.Button(
         buttons_frame,
-        text="Пройти заново",
+        text="Начать заново",
         width=15,
         command=lambda: show_scene("start")
     )
     btn_restart.pack(fill="x", pady=5)
+
+def manage_choice(choice):
+    if "next" in choice:
+        on_choice(choice["next"])
+    elif "action" in choice:
+        manage_choice(choice["action"])
+
+def manage_action(action):
+    if action == "restart":
+        restart_button()
+
+    elif action == "go_to_checkpoint":
+        open_checkpoint_menu()
+
+    elif action == "export_history":
+        export_history()
+
+def open_checkpoint_menu():
+    pass
+
+def export_history():
+    pass
 
 # Tkinter
 root = tk.Tk()
