@@ -1,7 +1,10 @@
 import json
 import tkinter as tk
 from tkinter import simpledialog
+from quest_statistics import QuestStatistics
+from tkinter import messagebox
 
+# json с текстом квеста
 with open("story_v2.json", "r", encoding="utf-8") as f:
     story = json.load(f)
 
@@ -11,6 +14,8 @@ class Quest:
         self.story = story
         self.current_scene = "start"
         self.player_name = ""
+        self.statistics = QuestStatistics()
+        self.player_id = self.statistics.create_player("player")
         self.state = {
             "refused_journalist": False,
             "close_seat_v1": False,
@@ -38,7 +43,7 @@ class Quest:
         for choice in choices:
             button = tk.Button(
                 self.buttons_frame,
-                text=choice["text"],
+                text=choice.get("text", "???"),
                 width=25,
                 command=lambda c=choice: self.manage_choice(c)
             )
@@ -60,42 +65,74 @@ class Quest:
 
     def manage_choice(self, choice):
         if "next" in choice:
-            self.on_choice(choice["next"])
+            next_scene = choice["next"]
+
+            if next_scene == "introduction" and not self.player_name:
+                self.ask_name()
+
+            if next_scene in self.state:
+                self.state[next_scene] = True
+
+            mode = "default"
+            if next_scene == "corridor_cross":
+                if self.state["refused_journalist"] and self.state["close_seat_v1"]:
+                    mode = "add_var1"
+                elif self.state["fire_alarm_cross2"]:
+                    mode = "add_var2"
+
+            if next_scene == "new_floor_cross":
+                if self.state["wait_stay_cross"]:
+                    mode = "add_var1"
+
+            self.statistics.save_choice(
+                self.player_id,
+                self.current_scene,
+                choice.get("text", ""),
+                next_scene
+            )
+            self.show_scene(next_scene, mode)
+
         elif "action" in choice:
             self.manage_action(choice["action"])
 
-    def on_choice(self, next_scene):
+    def on_choice(self, choice):
+        next_scene = choice["next"] # ЛОМАЕТСЯ ЗДЕСЬ
+
         if next_scene == "introduction" and not self.player_name:
             self.ask_name()
 
-        if next_scene == "refuse":
-            self.state["refused_journalist"] = True
+        if next_scene in self.state:
+            self.state[next_scene] = True
 
-        if next_scene == "close_seat_v1":
-            self.state["close_seat_v1"] = True
+        mode = "default"
 
-        if next_scene == "wait_stay_cross":
-            self.state["wait_stay_cross"] = True
-
-        if next_scene == "fire_alarm_cross2":
-            self.state["fire_alarm_cross2"] = True
-
-        self.mode = "default"
         if next_scene == "corridor_cross":
             if self.state["refused_journalist"] and self.state["close_seat_v1"]:
-                self.mode = "add_var1"
+                mode = "add_var1"
             elif self.state["fire_alarm_cross2"]:
-                self.mode = "add_var2"
+                mode = "add_var2"
 
         if next_scene == "new_floor_cross":
             if self.state["wait_stay_cross"]:
-                self.mode = "add_var1"
+                mode = "add_var1"
 
-        self.show_scene(next_scene, mode=self.mode)
+        self.statistics.save_choice(
+            self.player_id,
+            self.current_scene,
+            choice["text"],
+            next_scene
+        )
 
-    def manage_action(self, action):
+        self.show_scene(next_scene, mode)
+
+    def manage_action(self, action, scene_id=None): # Эта функция отвечает за последнюю страницу и 3 кнопки на ней
         if action == "restart":
-            self.restart_game() # TODO добавить другие действия и написать функции для них
+            self.restart_game()
+        elif action == "rollback":
+            self.rollback(scene_id)
+        elif action == "export_history":
+            self.export_history()
+
 
     def restart_game(self):
         self.player_name = ""
@@ -112,12 +149,45 @@ class Quest:
         btn_restart.pack(fill="x", pady=5)
 
     def ask_name(self):
-        self.player_name = simpledialog.askstring(
+        name = simpledialog.askstring(
             "Имя",
             "Как вас зовут?"
         )
-        if not self.player_name:
-            self.player_name = "Player 1" # TODO добавить айди из SQLite
+
+        if not name:
+            name = "Player"
+
+        self.player_name = name
+        self.statistics.update_player_name(self.player_id, name)
+
+    def rollback(self, scene_id):
+        history = self.statistics.get_choices_history(self.player_id)
+        if not history:
+            return
+
+        scene_ids = [row["scene_id"] for row in history]
+        unique_scenes = list(dict.fromkeys(scene_ids))  # сохраняем порядок
+
+        scene_list_str = "\n".join(f"{i + 1}. {sid}" for i, sid in enumerate(unique_scenes))
+        chosen_index = simpledialog.askinteger(
+            "Выбор сцены",
+            f"Выберите сцену для возврата:\n{scene_list_str}\nВведите номер:"
+        )
+
+        if chosen_index is None:
+            return
+
+        if 1 <= chosen_index <= len(unique_scenes):
+            scene_id = unique_scenes[chosen_index - 1]
+            self.statistics.rollback_to_scene(self.player_id, scene_id)
+            self.show_scene(scene_id)
+
+    def export_history(self):
+        filename = self.statistics.export_history_to_csv(self.player_id)
+        if filename:
+            tk.messagebox.showinfo("Экспорт истории", f"История успешно сохранена в {filename}")
+        else:
+            tk.messagebox.showinfo("Экспорт истории", "История пуста.")
 
 root = tk.Tk()
 root.title("Text Horror Quest")
@@ -126,7 +196,6 @@ game = Quest(root)
 game.show_scene("start")
 
 root.mainloop()
-
 
 
 

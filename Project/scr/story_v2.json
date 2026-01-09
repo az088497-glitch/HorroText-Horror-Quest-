@@ -460,7 +460,7 @@
     "choices": [
       {
         "text": "Продолжить",
-        "next": "fire_alarm_cross_v22"
+        "next": "fire_alarm_cross_v2"
       }
     ]
   },
@@ -505,7 +505,7 @@
     "choices": [
       {
         "text": "Продолжить",
-        "next": "fire_alarm_cross1"
+        "next": "fire_alarm_cross_v1"
       }
     ]
   },
@@ -520,7 +520,7 @@
       },
       {
         "text": "Вернуться к определённой сцене",
-        "action": "go_to_checkpoint"
+        "action": "rollback"
       },
       {
         "text": "Выгрузить историю прохождений",
