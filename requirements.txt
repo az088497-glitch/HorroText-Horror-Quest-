@@ -1,3 +1,5 @@
 customtkinter==5.2.2
-duckdb==1.2.1
-pandas==2.3.3
+# не нужны для запуска
+# pyinstaller==6.2.0
+# pytest==7.4.0
+# black==23.9.1
